@@ -13,12 +13,14 @@ var Matrix = function () {
      * Constructor for the Max7219
      * @param spi tessel 2 spi instance (f.e. tessel.Port.A.SPI)
      * @param chipSelect chip select pin for spi
+     * @param devices amount of devices
      * @constructor
      */
-    function Matrix(spi, chipSelect) {
+    function Matrix(spi, chipSelect, devices) {
         this._spi = spi;
         this._cs = chipSelect;
         //Becomes Threedimensional array to store data
+        this._devices = devices
         this._matrix = [];
     }
 
@@ -88,7 +90,7 @@ var Matrix = function () {
      * @param data data to be send
      */
     Matrix.prototype.writeColumn = function (device, column, data) {
-        if (!Array.isArray(this._matrix[device])){
+        if (!Array.isArray(this._matrix[device])) {
             this._matrix[device] = [];
         }
 
@@ -154,18 +156,75 @@ var Matrix = function () {
         var curDevice = this;
         var prom = Promise.resolve();
         return new Promise(resolve => {
-             for (var i = 1; i <= 8; i++){
-                 prom = prom.then(resolveLoop => {
-                     curDevice.writeColumn(device, i, 0x0)
-                         .then(function(){
-                             console.log(i);
-                             resolveLoop()
-                             if ( i === 8){
-                                 resolve(true);
-                             }
-                         });
-                 })
-             }
+            //Well shit. According to Datasheet the No-Operation Command is declared as 0xXX0X
+            //Problem? If we send Zeroes its gonna get pushed through. The biggest Problem is if we attempt to clear the screen
+            //Dirty Solution: Just spam some NO_OP's!
+
+            //Async Await does not work -> hardcoding the "loop"
+            curDevice.writeColumn(device, 1, 0x00)
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 2, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 3, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 4, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 5, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 6, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 7, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice.writeColumn(device, 8, 0x00);
+                })
+                .then(function () {
+                    delay(1);
+                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
+                })
+                .then(function () {
+                    resolve(true);
+                })
         });
     };
 
