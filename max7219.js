@@ -11,28 +11,32 @@
 var Matrix = function () {
     /**
      * Constructor for the Max7219
-     * @param spi tessel 2 spi instance (f.e. tessel.Port.A.SPI)
-     * @param chipSelect chip select pin for spi
-     * @param devices amount of devices
+     * @param spi tessel 2 spi instance (f.e. tessel.Port.A.SPI; Set cpha and cpol flags to 0, chipSelect is required)
      * @constructor
      */
-    function Matrix(spi, chipSelect, devices) {
+    function Matrix(spi, devices) {
         this._spi = spi;
-        this._cs = chipSelect;
-        //Becomes Threedimensional array to store data
-        this._devices = devices
-        this._matrix = [];
+        this._devices = devices;
     }
 
     Matrix.prototype._write = function (device, register, data) {
         if (!(register >= 0x00 && register <= 0xFF && data >= 0x00 && data <= 0xFF)) {
             return;
         }
-        return new Promise(resolve => {
+
+        //Since the Max7219 always pushes data to the next device when it receives data we need to do some tricks
+        //We push enough NO-OP's into the buffer so that we spam the "old" instruction out of the register
+        //Then we send the actual instruction to the device
+        //After that we probably need to send some NO-OP's again depending on which device our aim is
+        return new Promise(async resolve => {
             //new Array for Buffer to transfer Data
             var transferBuffer = [];
-            var cs = this._cs;
             var spi = this._spi;
+            var devices = this._devices;
+            for (let i = 1; i < devices; i++) {
+                transferBuffer.push(registers.OP_NO_OP);
+                transferBuffer.push(registers.OP_NO_OP);
+            }
             //Always send register first followed by data
             transferBuffer.push(register);
             transferBuffer.push(data);
@@ -42,15 +46,11 @@ var Matrix = function () {
                 transferBuffer.push(registers.OP_NO_OP);
             }
 
-            //pull chipSelect Low, send Data, then pull chipSelect High
-            cs.write(0, function () {
-                spi.send(new Buffer(transferBuffer), function () {
-                    cs.write(1, function () {
-                        delay(1);
-                        resolve(true);
-                    });
-                })
+            spi.send(new Buffer(transferBuffer), function () {
+                delay(1);
+                resolve(true);
             })
+
 
         })
     };
@@ -90,12 +90,6 @@ var Matrix = function () {
      * @param data data to be send
      */
     Matrix.prototype.writeColumn = function (device, column, data) {
-        if (!Array.isArray(this._matrix[device])) {
-            this._matrix[device] = [];
-        }
-
-        this._matrix[device][column] = data;
-
         if (column < 1 || column > 8) {
             return;
         }
@@ -149,82 +143,17 @@ var Matrix = function () {
 
     /**
      * Clears Column on all Devices
-     * @param column
+     * @param device the device we want to clear in the chain
      * @returns {Promise<any>}
      */
     Matrix.prototype.clearDisplay = function (device) {
         var curDevice = this;
-        var prom = Promise.resolve();
-        return new Promise(resolve => {
-            //Well shit. According to Datasheet the No-Operation Command is declared as 0xXX0X
-            //Problem? If we send Zeroes its gonna get pushed through. The biggest Problem is if we attempt to clear the screen
-            //Dirty Solution: Just spam some NO_OP's!
-
-            //Async Await does not work -> hardcoding the "loop"
-            curDevice.writeColumn(device, 1, 0x00)
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 2, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 3, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 4, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 5, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 6, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 7, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice.writeColumn(device, 8, 0x00);
-                })
-                .then(function () {
-                    delay(1);
-                    return curDevice._write(curDevice._devices, registers.OP_NO_OP, 0x00);
-                })
-                .then(function () {
-                    resolve(true);
-                })
+        return new Promise(async resolve => {
+            //Set each row to 0 -> cleared Display :)
+            for (let i = 1; i <= 8; i++) {
+                await curDevice.writeColumn(device, i, 0x00);
+            }
+            resolve(true);
         });
     };
 
